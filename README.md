@@ -28,7 +28,10 @@ pip install -r requirements.txt
 
 ` python app.py
 
+<video src="./result.mp4" controls width="600">
+  Your browser does not support the video tag.
+</video>
 
-[Watch result.mp4](result.mp4)
+
 
 

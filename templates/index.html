@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pothole Detection - Live Webcam</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        h1 { text-align: center; margin-bottom: 20px; color: #ff6b6b; }
+        .main-content { display: grid; grid-template-columns: 1fr 300px; gap: 20px; }
+        .video-container {
+            background: #000; border-radius: 10px; overflow: hidden;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3); position: relative;
+        }
+        #outputCanvas { width: 100%; display: block; }
+        .controls {
+            background: rgba(255,255,255,0.1); border-radius: 10px; padding: 20px;
+        }
+        button {
+            width: 100%; padding: 12px; margin: 10px 0; border: none;
+            border-radius: 5px; font-size: 16px; cursor: pointer; transition: all 0.3s;
+        }
+        .btn-go { background: #4caf50; color: white; }
+        .btn-go:hover { background: #43a047; transform: scale(1.02); }
+        .btn-stop { background: #dc3545; color: white; }
+        .btn-stop:hover { background: #c82333; transform: scale(1.02); }
+        .btn-pause { background: #ff6b6b; color: white; }
+        .btn-pause:hover { background: #ff5252; transform: scale(1.02); }
+        .stats {
+            margin-top: 20px; padding: 15px;
+            background: rgba(0,0,0,0.5); border-radius: 8px;
+        }
+        .stat-number { font-size: 36px; font-weight: bold; color: #ff6b6b; }
+        .detection-list { max-height: 300px; overflow-y: auto; margin-top: 15px; }
+        .detection-item {
+            background: rgba(255,107,107,0.2); padding: 8px;
+            margin: 5px 0; border-radius: 5px; font-size: 12px;
+        }
+        .camera-prompt {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; height: 400px; color: #888;
+            font-size: 18px; text-align: center; padding: 40px;
+        }
+        .camera-prompt .icon { font-size: 64px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚗 Pothole Detection System</h1>
+        <div class="main-content">
+            <div class="video-container">
+                <canvas id="outputCanvas" style="display:none;"></canvas>
+                <div id="cameraPrompt" class="camera-prompt">
+                    <div class="icon">📷</div>
+                    <div>Click <strong>"Start Camera"</strong> to begin live pothole detection</div>
+                    <div style="margin-top:10px;font-size:14px;color:#666;">Your browser will ask for camera permission</div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <h3>🎮 Controls</h3>
+                <button id="startBtn" class="btn-go">📷 Start Camera</button>
+                <button id="pauseBtn" class="btn-pause" disabled>⏸️ Pause Detection</button>
+
+                <div class="stats">
+                    <h3>📊 Statistics</h3>
+                    <div>Total Detections: <span id="detCount" class="stat-number">0</span></div>
+                    <div>Status: <span id="statusText">Waiting</span></div>
+                </div>
+                <div class="stats">
+                    <h3>📋 Recent Detections</h3>
+                    <div id="detList" class="detection-list">
+                        <div style="text-align:center;color:#888;">No detections yet</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- hidden video for getUserMedia -->
+    <video id="webcam" autoplay playsinline style="display:none;"></video>
+
+    <script>
+        const video  = document.getElementById('webcam');
+        const canvas = document.getElementById('outputCanvas');
+        const prompt = document.getElementById('cameraPrompt');
+        const ctx    = canvas.getContext('2d');
+        const cap    = document.createElement('canvas');   // offscreen capture
+        const capCtx = cap.getContext('2d');
+
+        const startBtn  = document.getElementById('startBtn');
+        const pauseBtn  = document.getElementById('pauseBtn');
+        const detCount  = document.getElementById('detCount');
+        const detList   = document.getElementById('detList');
+        const statusTxt = document.getElementById('statusText');
+
+        let running = false, paused = false, busy = false;
+        let total = 0, history = [];
+
+        // ── Start / Stop camera ──────────────────────────────
+        startBtn.onclick = async () => {
+            if (running) {                       // stop
+                video.srcObject.getTracks().forEach(t => t.stop());
+                running = false;
+                canvas.style.display = 'none';
+                prompt.style.display = 'flex';
+                startBtn.textContent = '📷 Start Camera';
+                startBtn.className = 'btn-go';
+                pauseBtn.disabled = true;
+                statusTxt.textContent = 'Stopped';
+                return;
+            }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width:{ideal:640}, height:{ideal:480}, facingMode:'environment' }
+                });
+                video.srcObject = stream;
+                await video.play();
+                cap.width = video.videoWidth;
+                cap.height = video.videoHeight;
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+
+                running = true; paused = false;
+                prompt.style.display = 'none';
+                canvas.style.display = 'block';
+                startBtn.textContent = '⏹️ Stop Camera';
+                startBtn.className = 'btn-stop';
+                pauseBtn.disabled = false;
+                statusTxt.textContent = 'Active';
+                statusTxt.style.color = '#4caf50';
+                loop();
+            } catch(e) { alert('Camera error: ' + e.message); }
+        };
+
+        // ── Pause / Resume ───────────────────────────────────
+        pauseBtn.onclick = () => {
+            paused = !paused;
+            pauseBtn.textContent = paused ? '▶️ Resume Detection' : '⏸️ Pause Detection';
+            statusTxt.textContent = paused ? 'Paused' : 'Active';
+            statusTxt.style.color = paused ? '#ff6b6b' : '#4caf50';
+        };
+
+        // ── Main loop: capture → send → draw ─────────────────
+        async function loop() {
+            if (!running) return;
+
+            if (!paused && !busy) {
+                busy = true;
+                capCtx.drawImage(video, 0, 0);
+                const dataUrl = cap.toDataURL('image/jpeg', 0.7);
+
+                try {
+                    const res = await fetch('/process_frame', {
+                        method: 'POST',
+                        headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({image: dataUrl})
+                    });
+                    const data = await res.json();
+                    if (data.image) {
+                        const img = new Image();
+                        img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        img.src = data.image;
+                    }
+                    if (data.count > 0) {
+                        total += data.count;
+                        detCount.textContent = total;
+                        data.detections.forEach(d => history.unshift(d));
+                        history = history.slice(0, 20);
+                        detList.innerHTML = history.map(d =>
+                            `<div class="detection-item">⚠️ Pothole! Confidence: ${(d.confidence*100).toFixed(1)}%</div>`
+                        ).join('');
+                    }
+                } catch(e) { console.error(e); }
+                busy = false;
+            } else if (paused) {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            }
+            setTimeout(() => requestAnimationFrame(loop), 100);
+        }
+    </script>
+</body>
+</html>

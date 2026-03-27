@@ -1,0 +1,19 @@
+# Core dependencies
+torch>=1.9.0
+torchvision>=0.10.0
+numpy>=1.19.0
+opencv-python>=4.5.0
+matplotlib>=3.3.0
+
+# YOLO / detection specific
+ultralytics>=8.0.0          # For YOLOv8
+# or if using older YOLOv5:
+# torch>=1.7.0
+# torchvision>=0.8.0
+
+# For dataset handling
+pillow>=8.0.0
+tqdm>=4.50.0
+
+# For visualization
+seaborn>=0.11.0

@@ -1,0 +1,40 @@
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+.env/
+
+# IDE/editor settings
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Large media outputs (optional, if you don’t want them in repo)
+*.mp4
+*.avi
+*.jpg
+*.png
+
+# Training artifacts / model checkpoints
+*.h5
+*.ckpt
+*.pth
+*.pt
+*.onnx
+
+# Node modules (if frontend involved)
+node_modules/
+
+# Build / dist folders
+dist/
+build/

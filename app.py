@@ -2,6 +2,7 @@ import cv2 as cv
 import numpy as np
 import base64
 import os
+import time
 from flask import Flask, render_template, jsonify, request
 
 app = Flask(__name__)
@@ -19,6 +20,12 @@ print("Model loaded!")
 Conf_threshold = 0.5
 NMS_threshold = 0.4
 
+# ─── Pothole save state ──────────────────────────────────────────────────────
+result_path = "pothole_coordinates"
+os.makedirs(result_path, exist_ok=True)
+pothole_save_index = 0
+last_save_time = 0
+
 
 @app.route('/')
 def index():
@@ -28,8 +35,13 @@ def index():
 @app.route('/process_frame', methods=['POST'])
 def process_frame():
     """Receive a webcam frame from the browser, detect potholes, return annotated frame."""
+    global pothole_save_index, last_save_time
     try:
-        img_data = request.json['image'].split(',')[1]
+        data = request.json
+        img_data = data['image'].split(',')[1]
+        lat = data.get('lat')
+        lng = data.get('lng')
+
         img_bytes = base64.b64decode(img_data)
         frame = cv.imdecode(np.frombuffer(img_bytes, np.uint8), cv.IMREAD_COLOR)
 
@@ -46,7 +58,21 @@ def process_frame():
                 cv.rectangle(frame, (x, y), (x + bw, y + bh), (0, 255, 0), 2)
                 cv.putText(frame, f"{round(float(score)*100,1)}% pothole",
                            (x, y - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-                detections.append({'confidence': float(score)})
+
+                det = {'confidence': float(score), 'lat': lat, 'lng': lng}
+                detections.append(det)
+
+                # Save pothole image + coordinates every 2 seconds
+                now = time.time()
+                if pothole_save_index == 0 or (now - last_save_time) >= 2:
+                    img_name = os.path.join(result_path, f'pothole{pothole_save_index}.jpg')
+                    txt_name = os.path.join(result_path, f'pothole{pothole_save_index}.txt')
+                    cv.imwrite(img_name, frame)
+                    coords = f'[{lat}, {lng}]' if lat and lng else 'Location unavailable'
+                    with open(txt_name, 'w') as f:
+                        f.write(coords)
+                    last_save_time = now
+                    pothole_save_index += 1
 
         _, buf = cv.imencode('.jpg', frame)
         b64 = base64.b64encode(buf).decode()
